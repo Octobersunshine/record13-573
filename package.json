@@ -1,0 +1,17 @@
+{
+  "name": "express-monitoring-business-labels",
+  "version": "1.0.0",
+  "description": "Node.js + Express monitoring with business labels support",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "prom-client": "^15.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
