@@ -17,19 +17,54 @@ const VALID_BUSINESS_LINES = [
   'unknown'
 ];
 
+const MAX_LABEL_LENGTH = 64;
+const DEFAULT_UNKNOWN = 'unknown';
+
+function sanitizeLabelValue(value) {
+  if (value === undefined || value === null) {
+    return DEFAULT_UNKNOWN;
+  }
+
+  let str = String(value);
+
+  if (str.length === 0) {
+    return DEFAULT_UNKNOWN;
+  }
+
+  str = str.replace(/[\x00-\x1F\x7F]/g, '');
+
+  str = str.replace(/[^a-zA-Z0-9_\-.:/]/g, '_');
+
+  if (!/^[a-zA-Z_]/.test(str)) {
+    str = '_' + str;
+  }
+
+  if (str.length > MAX_LABEL_LENGTH) {
+    str = str.substring(0, MAX_LABEL_LENGTH);
+  }
+
+  return str;
+}
+
 function isValidBusinessLine(line) {
   return VALID_BUSINESS_LINES.includes(line);
 }
 
 function detectBusinessLine(req) {
   const headerValue = req.headers[BUSINESS_LINE_HEADER];
-  if (headerValue && isValidBusinessLine(headerValue)) {
-    return headerValue;
+  if (headerValue) {
+    const sanitized = sanitizeLabelValue(headerValue);
+    if (sanitized !== DEFAULT_UNKNOWN) {
+      return sanitized;
+    }
   }
 
   const queryValue = req.query && req.query.business_line;
-  if (queryValue && isValidBusinessLine(queryValue)) {
-    return queryValue;
+  if (queryValue) {
+    const sanitized = sanitizeLabelValue(queryValue);
+    if (sanitized !== DEFAULT_UNKNOWN) {
+      return sanitized;
+    }
   }
 
   const path = (req.originalUrl || req.url || '').split('?')[0];
@@ -39,7 +74,7 @@ function detectBusinessLine(req) {
     }
   }
 
-  return 'unknown';
+  return DEFAULT_UNKNOWN;
 }
 
 function businessLabelMiddleware(req, res, next) {
@@ -48,7 +83,7 @@ function businessLabelMiddleware(req, res, next) {
 }
 
 function requireBusinessLine(req, res, next) {
-  if (!req.businessLine || req.businessLine === 'unknown') {
+  if (!req.businessLine || req.businessLine === DEFAULT_UNKNOWN) {
     return res.status(400).json({
       error: 'Missing or invalid business line',
       message: `Please specify business line via '${BUSINESS_LINE_HEADER}' header, 'business_line' query param, or use a prefixed route`
@@ -61,7 +96,9 @@ module.exports = {
   businessLabelMiddleware,
   requireBusinessLine,
   detectBusinessLine,
+  sanitizeLabelValue,
   BUSINESS_LINE_HEADER,
   BUSINESS_LINE_ROUTES,
-  VALID_BUSINESS_LINES
+  VALID_BUSINESS_LINES,
+  DEFAULT_UNKNOWN
 };
