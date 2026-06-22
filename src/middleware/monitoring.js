@@ -107,9 +107,119 @@ async function metricsEndpoint(req, res) {
   }
 }
 
+function matchesLabel(labels, key, filterValue) {
+  if (!filterValue) return true;
+  const actualValue = labels[key];
+  if (actualValue === undefined) return false;
+  return actualValue === filterValue;
+}
+
+function matchesLabelPrefix(labels, key, prefix) {
+  if (!prefix) return true;
+  const actualValue = labels[key];
+  if (actualValue === undefined) return false;
+  return actualValue.startsWith(prefix);
+}
+
+function filterMetric(metric, filters) {
+  const filteredValues = metric.values.filter(item => {
+    const labels = item.labels || {};
+    if (!matchesLabel(labels, 'business_line', filters.business_line)) return false;
+    if (!matchesLabel(labels, 'method', filters.method)) return false;
+    if (!matchesLabel(labels, 'status_code', filters.status_code)) return false;
+    if (!matchesLabelPrefix(labels, 'route', filters.route_prefix)) return false;
+    return true;
+  });
+
+  return {
+    ...metric,
+    values: filteredValues
+  };
+}
+
+async function queryMetrics(filters = {}) {
+  const allMetrics = await register.getMetricsAsJSON();
+
+  let filteredMetrics = allMetrics;
+
+  if (filters.name) {
+    filteredMetrics = filteredMetrics.filter(m => m.name === filters.name);
+  }
+
+  filteredMetrics = filteredMetrics.map(metric => filterMetric(metric, filters));
+
+  if (filters.only_non_empty) {
+    filteredMetrics = filteredMetrics.filter(m => m.values.length > 0);
+  }
+
+  return {
+    timestamp: new Date().toISOString(),
+    filters,
+    metrics: filteredMetrics
+  };
+}
+
+async function metricsQueryEndpoint(req, res) {
+  try {
+    const filters = {
+      business_line: req.query.business_line || null,
+      method: req.query.method ? String(req.query.method).toUpperCase() : null,
+      status_code: req.query.status_code ? String(req.query.status_code) : null,
+      route_prefix: req.query.route_prefix || null,
+      name: req.query.name || null,
+      only_non_empty: req.query.only_non_empty === 'true'
+    };
+
+    const result = await queryMetrics(filters);
+
+    res.set('Content-Type', 'application/json');
+    res.json(result);
+  } catch (err) {
+    console.error('Query metrics error:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+async function listLabelsEndpoint(req, res) {
+  try {
+    const labelName = req.params.label;
+    const validLabels = ['business_line', 'method', 'route', 'status_code'];
+
+    if (!validLabels.includes(labelName)) {
+      return res.status(400).json({
+        error: 'Invalid label name',
+        valid_labels: validLabels
+      });
+    }
+
+    const allMetrics = await register.getMetricsAsJSON();
+    const valuesSet = new Set();
+
+    for (const metric of allMetrics) {
+      if (!metric.values) continue;
+
+      for (const item of metric.values) {
+        if (item.labels && item.labels[labelName] !== undefined) {
+          valuesSet.add(item.labels[labelName]);
+        }
+      }
+    }
+
+    res.json({
+      label: labelName,
+      values: Array.from(valuesSet).sort()
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
 module.exports = {
   monitoringMiddleware,
   metricsEndpoint,
+  metricsQueryEndpoint,
+  listLabelsEndpoint,
+  queryMetrics,
   register,
   httpRequestDurationMicroseconds,
   httpRequestTotal,

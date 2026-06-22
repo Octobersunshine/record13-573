@@ -1,5 +1,5 @@
 const express = require('express');
-const { monitoringMiddleware, metricsEndpoint } = require('./middleware/monitoring');
+const { monitoringMiddleware, metricsEndpoint, metricsQueryEndpoint, listLabelsEndpoint } = require('./middleware/monitoring');
 const { businessLabelMiddleware, requireBusinessLine } = require('./middleware/businessLabel');
 const orderRoutes = require('./routes/order');
 const userRoutes = require('./routes/user');
@@ -25,6 +25,9 @@ app.get('/health', (req, res) => {
 
 app.get('/metrics', metricsEndpoint);
 
+app.get('/api/metrics/query', metricsQueryEndpoint);
+app.get('/api/metrics/labels/:label', listLabelsEndpoint);
+
 app.use('/api/order', requireBusinessLine, orderRoutes);
 app.use('/api/user', requireBusinessLine, userRoutes);
 app.use('/api/payment', requireBusinessLine, paymentRoutes);
@@ -37,6 +40,23 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/health',
       metrics: '/metrics',
+      metrics_query: {
+        path: '/api/metrics/query',
+        description: 'Query metrics with label filters (JSON format)',
+        params: {
+          business_line: 'Filter by business line (exact match)',
+          method: 'Filter by HTTP method (GET, POST, etc.)',
+          status_code: 'Filter by HTTP status code',
+          route_prefix: 'Filter by route prefix',
+          name: 'Filter by metric name',
+          only_non_empty: 'Only return metrics with values (true/false)'
+        }
+      },
+      labels_query: {
+        path: '/api/metrics/labels/:label',
+        description: 'List all values for a specific label',
+        valid_labels: ['business_line', 'method', 'route', 'status_code']
+      },
       apis: {
         order: '/api/order',
         user: '/api/user',
@@ -49,7 +69,12 @@ app.get('/', (req, res) => {
     howToUse: {
       header: 'Set x-business-line header (e.g., order_service, user_service)',
       queryParam: 'Use ?business_line=order_service query param',
-      autoDetection: 'Routes with /api/order, /api/user etc. prefixes are auto-detected'
+      autoDetection: 'Routes with /api/order, /api/user etc. prefixes are auto-detected',
+      examples: {
+        filter_by_business_line: '/api/metrics/query?business_line=order_service',
+        filter_by_method: '/api/metrics/query?method=GET&only_non_empty=true',
+        list_business_lines: '/api/metrics/labels/business_line'
+      }
     }
   });
 });
